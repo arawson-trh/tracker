@@ -24,11 +24,9 @@ FuelGauge fuel;
 SerialDebugOutput debugOutput;
 
 #define PREFIX "t/"
-
 #define CLICKTHRESHHOLD 20
 
 
-// lets keep the radio off until we get a fix, or 2 minutes go by.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
 
@@ -85,9 +83,11 @@ void initAccel() {
     accel.setClick(1, CLICKTHRESHHOLD);//, 0, 100, 50);
 }
 
+
 bool gpsActivated() {
     return GPS_ACTIVE;
 }
+
 
 void deactivateGPS() { 
     Serial.println("GPS: Disabling power to GPS shield...");
@@ -97,8 +97,8 @@ void deactivateGPS() {
     GPS_ACTIVE = false;
 }
 
-void activateGPS() {
 
+void activateGPS() {
     Serial.println("GPS: Enabling power to GPS shield...");
 
     // electron asset tracker shield needs this to enable the power to the gps module.
@@ -127,8 +127,10 @@ void activateGPS() {
     GPS_ACTIVE = true;
 }
 
+
 int publishMode(String mode);
 int forceSleep(String seconds);
+
 
 void setup() {
     lastMotion = 0;
@@ -148,16 +150,19 @@ void setup() {
     Particle.function("sleep", forceSleep);
 }
 
+
 int publishMode(String mode) {
     PUBLISH_MODE = (mode == "enabled") ? true : false;
     return 1;
 }
+
 
 // Define sleep timer function
 bool doSleep() {
     Serial.println("Sleeping...");
     System.sleep(SLEEP_MODE_DEEP, SLEEP_TIME);
 }
+
 
 int forceSleep(String seconds) {
     sscanf(seconds, "%u", SLEEP_TIME);
@@ -186,16 +191,6 @@ void checkGPS() {
     }
 }
 
-int crc8(String str) {
-    int len = str.length();
-    const char * buffer = str.c_str();
-
-    int crc = 0;
-    for(int i=0;i<len;i++) {
-        crc ^= (buffer[i] & 0xff);
-    }
-    return crc;
-}
 
 /* Send hint commands to GPS module with cellular location fix
  * This should speed up time to fix in low signal strength situations.
@@ -230,6 +225,7 @@ void gpsHint(MDM_CELL_LOCATE& loc) {
         Serial.println("gpsHint: Attempted to hint GPS but it isn't activated!");
     }
 }
+
 
 void publishLocation() {
     if(PUBLISH_MODE) {
@@ -277,6 +273,7 @@ void publishLocation() {
     }
 }
 
+
 bool hasMotion() {
     bool motion = false;
     uint16_t cnt = 0;
@@ -289,6 +286,7 @@ bool hasMotion() {
     
     return motion;
 }
+
 
 void checkMotion() {
     if(hasMotion()) {
@@ -311,6 +309,7 @@ void checkMotion() {
         }
     }
 }
+
 
 void idleCheckin() {
     // If we havent idle checked-in yet, set our initial timer.
@@ -336,6 +335,7 @@ void idleCheckin() {
         lastIdleCheckin = Time.now();
     }
 }
+
 
 void checkCellLocation() {
     // Only request cell location when connected and with no GPS fix
@@ -367,6 +367,7 @@ void checkCellLocation() {
     }
 }
 
+
 void idleSleep(unsigned long now) {
     if ((now - lastMotion) > NO_MOTION_IDLE_SLEEP_DELAY) {
         Serial.printlnf("No motion in %d ms, sleeping...", (now - lastMotion));
@@ -390,6 +391,7 @@ void idleSleep(unsigned long now) {
         //System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
     }
 }
+
 
 void loop() {
 

@@ -22,5 +22,15 @@ double convertDegMinToDecDeg (float degMin) {
 }
 
 
+int crc8(String str) {
+    int len = str.length();
+    const char * buffer = str.c_str();
+
+    int crc = 0;
+    for(int i=0;i<len;i++) {
+        crc ^= (buffer[i] & 0xff);
+    }
+    return crc;
+}
 
 #endif
