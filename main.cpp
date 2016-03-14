@@ -239,31 +239,31 @@ void publishLocation() {
             if(!GPS.fix && is_cell_locate_accurate(_cell_locate,CELL_LOCATION_IGNORE_ACCURACY)) {
                 Serial.println("Publish: No GPS Fix, reporting Cellular location...");
                 String loc_data =
-                      "{\"lat\":"    + String(_cell_locate.lat)
-                    + ",\"lon\":"   + String(_cell_locate.lng)
-                    + ",\"a\":"     + String(_cell_locate.altitude)
-                    + ",\"q\":"     + String(_cell_locate.uncertainty)
+                      "{\"lat\":"      + String(_cell_locate.lat)
+                    + ",\"lon\":"      + String(_cell_locate.lng)
+                    + ",\"a\":"        + String(_cell_locate.altitude)
+                    + ",\"q\":"        + String(_cell_locate.uncertainty)
                     + ",\"t\":\"gsm\""
-                    + ",\"spd\":"   + String(_cell_locate.speed) 
-                    + ",\"mot\":"   + String(motionInTheLastMinute)
+                    + ",\"spd\":"      + String(_cell_locate.speed) 
+                    + ",\"mot\":"      + String(motionInTheLastMinute)
                     + ",\"s\": 0"
-                    + ",\"vcc\":"   + String(fuel.getVCell())
-                    + ",\"soc\":"   + String(fuel.getSoC())
+                    + ",\"vcc\":"      + String(fuel.getVCell())
+                    + ",\"soc\":"      + String(fuel.getSoC())
                     + "}";
                 Particle.publish(PREFIX + String("l"), loc_data, 60, PRIVATE);
             } else if (GPS.fix) {
                 Serial.println("Publish: GPS Fix available, reporting...");
                 String loc_data =
-                      "{\"lat\":"    + String(convertDegMinToDecDeg(GPS.latitude))
-                    + ",\"lon\":-"   + String(convertDegMinToDecDeg(GPS.longitude))
-                    + ",\"a\":"     + String(GPS.altitude)
-                    + ",\"q\":"     + String(GPS.fixquality)
+                      "{\"lat\":"      + String(convertDegMinToDecDeg(GPS.latitude))
+                    + ",\"lon\":-"     + String(convertDegMinToDecDeg(GPS.longitude))
+                    + ",\"a\":"        + String(GPS.altitude)
+                    + ",\"q\":"        + String(GPS.fixquality)
                     + ",\"t\":\"gps\""
-                    + ",\"spd\":"   + String(GPS.speed * 0.514444) 
-                    + ",\"mot\":"   + String(motionInTheLastMinute)
-                    + ",\"s\": "  + String(GPS.satellites)
-                    + ",\"vcc\":"   + String(fuel.getVCell())
-                    + ",\"soc\":"   + String(fuel.getSoC())
+                    + ",\"spd\":"      + String(GPS.speed * 0.514444) 
+                    + ",\"mot\":"      + String(motionInTheLastMinute)
+                    + ",\"s\": "       + String(GPS.satellites)
+                    + ",\"vcc\":"      + String(fuel.getVCell())
+                    + ",\"soc\":"      + String(fuel.getSoC())
                     + "}";
                 Particle.publish(PREFIX + String("l"), loc_data, 60, PRIVATE);
             } else {
