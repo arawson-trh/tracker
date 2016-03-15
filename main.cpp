@@ -39,7 +39,13 @@ unsigned long lastMMessage = 0;
 
 time_t lastIdleCheckin = 0;
 
-bool GPS_ACTIVE   = false;
+bool          GPS_ACTIVE         = false;
+unsigned long GPS_ACTIVATED_AT   = 0;
+unsigned long GPS_DEACTIVATED_AT = 0;
+
+unsigned long GPS_NO_FIX_SHUTDOWN = (10 * 60 * 1000);
+unsigned long GPS_NO_FIX_STARTUP  = (10 * 60 * 1000);
+
 bool PUBLISH_MODE = true; // Publish by default
 
 // publish after x seconds
@@ -95,6 +101,8 @@ void deactivateGPS() {
     // Hey GPS, please stop using power, kthx.
     digitalWrite(D6, HIGH);
     GPS_ACTIVE = false;
+    GPS_ACTIVATED_AT   = 0;
+    GPS_DEACTIVATED_AT = millis();
 }
 
 
@@ -125,7 +133,11 @@ void activateGPS() {
     delay(250);
 
     GPS_ACTIVE = true;
+    // Set GPS activated at
+    GPS_ACTIVATED_AT   = millis();
+    GPS_DEACTIVATED_AT = 0;
 }
+
 
 
 int publishMode(String mode);
@@ -368,6 +380,29 @@ void checkCellLocation() {
 }
 
 
+void idleReDeactivateGPS() {
+    unsigned long now = millis();
+
+    // If GPS is activated but we don't have a fix
+    if(gpsActivated() && !GPS.fix) { 
+        // And we've spent GPS_NO_FIX_SHUTDOWN since activating
+        if ((now - GPS_ACTIVATED_AT) > GPS_NO_FIX_SHUTDOWN) {
+            Serial.printlnf("Deactivating GPS because we didn't get a fix in %d seconds", (GPS_NO_FIX_SHUTDOWN / 1000));
+            // Shut down GPS
+            deactivateGPS();
+        }
+    // Otherwise if GPS is not activated
+    } else if(!gpsActivated()) {
+        // And we've spent GPS_NO_FIX_SHUTDOWN since deactivating
+        if ((now - GPS_DEACTIVATED_AT) > GPS_NO_FIX_STARTUP) {
+            Serial.printlnf("Activating GPS because we shut it down for %d seconds...", (GPS_NO_FIX_STARTUP / 1000));
+            // Wake up GPS
+            activateGPS();
+        }
+    }
+}
+
+
 void idleSleep(unsigned long now) {
     if ((now - lastMotion) > NO_MOTION_IDLE_SLEEP_DELAY) {
         Serial.printlnf("No motion in %d ms, sleeping...", (now - lastMotion));
@@ -432,6 +467,20 @@ void loop() {
         lastMMessage = now;
     }
 
+    /* Deactivate GPS if we haven't got a lock in <interval> minutes.
+     * This is intended to save battery by allowing the GPS module
+     * to be turned off if we can't get a fix but movement is still
+     * occurring. Report GSM location only */
+    idleReDeactivateGPS();
+
+    // If less than 20% battery, turn off accelerometer interrupt if it isn't already off
+    if(fuel.getSoC() < 20) {
+        // DRDY on INT1
+        // writeRegister8(LIS3DH_REG_CTRL3, 0x00);
+        
+        // Rely on idle timeout to check in every x hours
+    }
+    
     // use "now" instead of millis...  If it takes us a REALLY long time to connect, we don't want to
     // accidentally idle out.
     idleSleep(now);
