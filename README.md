@@ -32,7 +32,7 @@ The basic implementation provides a combined GPS and Mobile network location sys
   - Rely on idle checkin every 6 hours (or longer? configurable maybe) to report location
 
 - If we've not detected motion in more than 3 minutes
-  - Put the Electron into deep sleep mode
+  - Put the Electron into deep sleep mode for 6 hours (or until woken by motion)
 
 
 TODO
