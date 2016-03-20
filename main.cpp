@@ -95,7 +95,7 @@ bool gpsActivated() {
 }
 
 
-void deactivateGPS() { 
+void deactivateGPS() {
     Serial.println("GPS: Disabling power to GPS shield...");
 
     // Hey GPS, please stop using power, kthx.
@@ -247,7 +247,7 @@ void publishLocation() {
 
             unsigned int msSinceLastMotion = (now - lastMotion);
             int motionInTheLastMinute = (msSinceLastMotion < 60000);
-            
+
             if(!GPS.fix && is_cell_locate_accurate(_cell_locate,CELL_LOCATION_IGNORE_ACCURACY)) {
                 Serial.println("Publish: No GPS Fix, reporting Cellular location...");
                 String loc_data =
@@ -256,7 +256,7 @@ void publishLocation() {
                     + ",\"a\":"        + String(_cell_locate.altitude)
                     + ",\"q\":"        + String(_cell_locate.uncertainty)
                     + ",\"t\":\"gsm\""
-                    + ",\"spd\":"      + String(_cell_locate.speed) 
+                    + ",\"spd\":"      + String(_cell_locate.speed)
                     + ",\"mot\":"      + String(motionInTheLastMinute)
                     + ",\"s\": 0"
                     + ",\"vcc\":"      + String(fuel.getVCell())
@@ -271,7 +271,7 @@ void publishLocation() {
                     + ",\"a\":"        + String(GPS.altitude)
                     + ",\"q\":"        + String(GPS.fixquality)
                     + ",\"t\":\"gps\""
-                    + ",\"spd\":"      + String(GPS.speed * 0.514444) 
+                    + ",\"spd\":"      + String(GPS.speed * 0.514444)
                     + ",\"mot\":"      + String(motionInTheLastMinute)
                     + ",\"s\": "       + String(GPS.satellites)
                     + ",\"vcc\":"      + String(fuel.getVCell())
@@ -295,7 +295,7 @@ bool hasMotion() {
         cnt++;
     }
     while(!motion && cnt < 500);
-    
+
     return motion;
 }
 
@@ -360,7 +360,7 @@ void checkCellLocation() {
                     /* Handle non-instant return of URC */
                     while (cell_locate_in_progress(_cell_locate)) {
                         /* Since this loop might take a while, check for location between checking
-                         * return of cell location 
+                         * return of cell location
                          */
                         checkMotion();
 
@@ -384,7 +384,7 @@ void idleReDeactivateGPS() {
     unsigned long now = millis();
 
     // If GPS is activated but we don't have a fix
-    if(gpsActivated() && !GPS.fix) { 
+    if(gpsActivated() && !GPS.fix) {
         // And we've spent GPS_NO_FIX_SHUTDOWN since activating
         if ((now - GPS_ACTIVATED_AT) > GPS_NO_FIX_SHUTDOWN) {
             Serial.printlnf("Deactivating GPS because we didn't get a fix in %d seconds", (GPS_NO_FIX_SHUTDOWN / 1000));
@@ -416,7 +416,7 @@ void idleSleep(unsigned long now) {
         lastCellLocation = 0;
 
         deactivateGPS();
-        
+
         // lets give ourselves a chance to settle, deal with anything pending, achieve enlightenment...
         delay(10*1000);
         System.sleep(WKP, CHANGE, HOW_LONG_SHOULD_WE_SLEEP);
@@ -434,20 +434,20 @@ void loop() {
 
     /* If any of these timers are higher than now then something went weird
      * or timer rolled over ??? so... reset
-     */ 
+     */
     if (lastMotion > now) { lastMotion = now; }
     if (lastPublish > now) { lastPublish = now; }
     if (lastCellLocation > now) { lastCellLocation = now; }
 
     /* Check to see if we've seen any motion
-     * if so, enable GPS, connect, reset timers. This order gives time for 
+     * if so, enable GPS, connect, reset timers. This order gives time for
      * GPS to start while we connect
      */
     checkMotion();
 
     /* If we havent idle checked in in a long time, do it now.
      * This enables GPS, connects, resets idle timer and sends
-     * a location. 
+     * a location.
      */
     idleCheckin();
 
@@ -477,10 +477,10 @@ void loop() {
     if(fuel.getSoC() < 20) {
         // DRDY on INT1
         // writeRegister8(LIS3DH_REG_CTRL3, 0x00);
-        
+
         // Rely on idle timeout to check in every x hours
     }
-    
+
     // use "now" instead of millis...  If it takes us a REALLY long time to connect, we don't want to
     // accidentally idle out.
     idleSleep(now);

@@ -1,10 +1,8 @@
-
 #include <math.h>
 #include <ctype.h>
 
 #ifndef _GPS_MATH_H
 #define _GPS_MATH_H
-
 
  //http://arduinodev.woofex.net/2013/02/06/adafruit_gps_forma/
 double convertDegMinToDecDeg (float degMin) {
