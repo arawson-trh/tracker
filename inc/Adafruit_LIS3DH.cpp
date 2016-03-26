@@ -226,7 +226,7 @@ void Adafruit_LIS3DH::setClick(uint8_t c, uint8_t clickthresh, uint8_t timelimit
   }
   // else...
 
-  writeRegister8(LIS3DH_REG_CTRL3, 0x80); // turn on int1 click
+  writeRegister8(LIS3DH_REG_CTRL3, 0xC0); // turn on int1 click
   writeRegister8(LIS3DH_REG_CTRL5, 0x08); // latch interrupt on int1
 
   if (c == 1)

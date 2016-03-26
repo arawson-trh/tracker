@@ -124,10 +124,10 @@ class Adafruit_LIS3DH : public Adafruit_Sensor {
   int16_t x, y, z;
   float x_g, y_g, z_g;
 
-
- private:
   uint8_t readRegister8(uint8_t reg);
   void writeRegister8(uint8_t reg, uint8_t value);
+
+ private:
   uint8_t spixfer(uint8_t x = 0xFF);
 
 

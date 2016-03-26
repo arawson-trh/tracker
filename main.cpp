@@ -72,23 +72,29 @@ unsigned int SLEEP_TIME = 3600; // Sleep for an hour by default
 // (seconds)
 int MAX_IDLE_CHECKIN_DELAY = (HOW_LONG_SHOULD_WE_SLEEP - 60);
 
-
 void initAccel() {
     accel.begin(LIS3DH_DEFAULT_ADDRESS);
 
     // Default to 5kHz low-power sampling
     accel.setDataRate(LIS3DH_DATARATE_LOWPOWER_5KHZ);
 
-    // Default to 4 gravities range
-    accel.setRange(LIS3DH_RANGE_4_G);
+    accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
+    accel.writeRegister8(LIS3DH_REG_CTRL3, 0x40); // Enable AOI interrupt
 
-    // listen for single-tap events at the threshold
-    // keep the pin high for 1s, wait 1s between clicks
+    // Set 2g range
+    accel.setRange(LIS3DH_RANGE_2_G);
 
-    //uint8_t c, uint8_t clickthresh, uint8_t timelimit, uint8_t timelatency, uint8_t timewindow
-    accel.setClick(1, CLICKTHRESHHOLD);//, 0, 100, 50);
+    accel.writeRegister8(LIS3DH_REG_CTRL5, 0x08); // latch interrupt so we can read when ready if blocked
+
+    accel.writeRegister8(LIS3DH_REG_INT1THS, 0x08); // Set threshold to 8 (relatively low?)
+    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x01); // Set duration to 1 cycle
+    accel.writeRegister8(LIS3DH_REG_INT1CFG, 0x2A); // Enable X,Y,Z interrupt generation
+
+    // Reset HP Filter
+    accel.readRegister8(LIS3DH_REG_INT1SRC);
+    accel.readRegister8(LIS3DH_REG_CTRL2);
+
 }
-
 
 bool gpsActivated() {
     return GPS_ACTIVE;
@@ -142,6 +148,7 @@ void activateGPS() {
 
 int publishMode(String mode);
 int forceSleep(String seconds);
+void button_clicked(system_event_t event, int param);
 
 
 void setup() {
@@ -160,6 +167,9 @@ void setup() {
 
     Particle.function("publish", publishMode);
     Particle.function("sleep", forceSleep);
+
+    // Setup manual sleep button clicks
+    System.on(button_final_click, button_clicked);
 }
 
 
@@ -183,6 +193,18 @@ int forceSleep(String seconds) {
     Timer shutdown_timer(10000, doSleep, true);
     shutdown_timer.start();
     return 1;
+}
+
+void button_clicked(system_event_t event, int param)
+{
+        int times = system_button_clicks(param);
+        Serial.printlnf("Button %d pressed %d times...", times, param);
+        if(times == 3) {
+            Serial.println("Manually deep sleeping for 21600s but will wake up for motion...");
+            System.sleep(SLEEP_MODE_DEEP,HOW_LONG_SHOULD_WE_SLEEP);
+        } else {
+            Serial.printlnf("Mode button %d clicks is unknown! Maybe this is a system handled number?", event);
+        }
 }
 
 
@@ -287,14 +309,11 @@ void publishLocation() {
 
 
 bool hasMotion() {
-    bool motion = false;
-    uint16_t cnt = 0;
-    do {
-        motion = digitalRead(WKP);
-        digitalWrite(D7, (motion) ? HIGH : LOW);
-        cnt++;
-    }
-    while(!motion && cnt < 500);
+    bool motion = digitalRead(WKP);
+    digitalWrite(D7, (motion) ? HIGH : LOW);
+
+    // Reset accelerometer interrupt (latched)
+    accel.readRegister8(LIS3DH_REG_INT1SRC);
 
     return motion;
 }
@@ -359,11 +378,6 @@ void checkCellLocation() {
                 if (ret == 0) {
                     /* Handle non-instant return of URC */
                     while (cell_locate_in_progress(_cell_locate)) {
-                        /* Since this loop might take a while, check for location between checking
-                         * return of cell location
-                         */
-                        checkMotion();
-
                         /* still waiting for URC */
                         cell_locate_get_response(_cell_locate);
                     }
@@ -404,7 +418,10 @@ void idleReDeactivateGPS() {
 
 
 void idleSleep(unsigned long now) {
-    if ((now - lastMotion) > NO_MOTION_IDLE_SLEEP_DELAY) {
+    // Make sure this is valid
+    unsigned long since_last_motion = now - lastMotion;
+
+    if (0 < since_last_motion > NO_MOTION_IDLE_SLEEP_DELAY) {
         Serial.printlnf("No motion in %d ms, sleeping...", (now - lastMotion));
         // hey, it's been longer than xx minutes and nothing is happening, lets go to sleep.
         // if the accel triggers an interrupt, we'll wakeup earlier than that.
@@ -419,11 +436,7 @@ void idleSleep(unsigned long now) {
 
         // lets give ourselves a chance to settle, deal with anything pending, achieve enlightenment...
         delay(10*1000);
-        System.sleep(WKP, CHANGE, HOW_LONG_SHOULD_WE_SLEEP);
-
-        // Set lastMotion to now on wake (only from non-deep sleep since deep will re-call setup()
-        lastMotion = millis();
-        //System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
+        System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
     }
 }
 
@@ -475,8 +488,7 @@ void loop() {
 
     // If less than 20% battery, turn off accelerometer interrupt if it isn't already off
     if(fuel.getSoC() < 20) {
-        // DRDY on INT1
-        // writeRegister8(LIS3DH_REG_CTRL3, 0x00);
+        // Disable interrupts
 
         // Rely on idle timeout to check in every x hours
     }
