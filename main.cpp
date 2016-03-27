@@ -50,6 +50,8 @@ bool PUBLISH_MODE = true; // Publish by default
 
 bool TIME_TO_SLEEP = false;
 
+retained bool ACCEL_HPFILTER_SET = false;
+
 // publish after x seconds
 unsigned int PUBLISH_DELAY = (120 * 1000);
 
@@ -80,7 +82,8 @@ void initAccel() {
     // Default to 5kHz low-power sampling
     accel.setDataRate(LIS3DH_DATARATE_LOWPOWER_5KHZ);
 
-    //accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
+    accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
+    //accel.writeRegister8(LIS3DH_REG_CTRL2, 0x00); // Disable HP Filter
     accel.writeRegister8(LIS3DH_REG_CTRL3, 0x40); // Enable AOI interrupt
 
     // Set 4g range
@@ -89,12 +92,11 @@ void initAccel() {
     accel.writeRegister8(LIS3DH_REG_CTRL5, 0x08); // latch interrupt so we can read when ready if blocked
 
     accel.writeRegister8(LIS3DH_REG_INT1THS, 0x14); // Set threshold to 8 (relatively low?)
-    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x14); // Set duration to 1 cycle
+    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x08); // Set duration to 1 cycle
     accel.writeRegister8(LIS3DH_REG_INT1CFG, 0x2A); // Enable X,Y,Z interrupt generation
 
-    // Reset HP Filter
+    // Reset Motion Interrupt
     accel.readRegister8(LIS3DH_REG_INT1SRC);
-    //accel.readRegister8(LIS3DH_REG_CTRL2);
 
 }
 
@@ -153,6 +155,7 @@ void button_clicked(system_event_t event, int param);
 
 
 void setup() {
+    Serial.begin(9600);
     lastMotion = 0;
     lastMMessage = 0;
     lastPublish = 0;
@@ -163,8 +166,6 @@ void setup() {
     // for blinking.
     pinMode(D7, OUTPUT);
     digitalWrite(D7, LOW);
-
-    Serial.begin(9600);
 
     Particle.function("publish", publishMode);
 
@@ -220,6 +221,8 @@ void button_clicked(system_event_t event, int param)
             Serial.println("Manually deep sleeping for 21600s but will wake up for motion...");
             // reset the accelerometer interrupt so we can sleep without instantly waking
             TIME_TO_SLEEP = true;
+        } else if(times == 4) {
+            ACCEL_HPFILTER_SET = false;
         } else {
             Serial.printlnf("Mode button %d clicks is unknown! Maybe this is a system handled number?", event);
         }
@@ -447,6 +450,27 @@ void idleSleep(unsigned long now) {
     }
 }
 
+void resetHPFilter() {
+    // Only cause a 'set' of the HP filter on first start or when requested
+    // Device should be MOTIONLESS.
+    if(!ACCEL_HPFILTER_SET) {
+        Serial.println("Resetting HP filter in 5s, make sure device is stationary!");
+        RGB.control(true);
+        for(int i = 0; i < 50; i++) {
+            if((i % 3) == 0)
+                RGB.color(255,0,0);
+            if((i % 3) == 1)
+                RGB.color(0,255,0);
+            if((i % 3) == 2)
+                RGB.color(0,0,255);
+            delay(100);
+        }
+        Serial.println("Resetting HP NOW!");
+        accel.readRegister8(LIS3DH_REG_CTRL2);
+        ACCEL_HPFILTER_SET = true;
+        RGB.control(false);
+    }
+}
 
 void loop() {
 
@@ -458,6 +482,8 @@ void loop() {
     if (lastMotion > now) { lastMotion = now; }
     if (lastPublish > now) { lastPublish = now; }
     if (lastCellLocation > now) { lastCellLocation = now; }
+
+    resetHPFilter();
 
     /* Check to see if we've seen any motion
      * if so, enable GPS, connect, reset timers. This order gives time for
