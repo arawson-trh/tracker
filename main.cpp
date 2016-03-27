@@ -48,6 +48,8 @@ unsigned long GPS_NO_FIX_STARTUP  = (10 * 60 * 1000);
 
 bool PUBLISH_MODE = true; // Publish by default
 
+bool TIME_TO_SLEEP = false;
+
 // publish after x seconds
 unsigned int PUBLISH_DELAY = (120 * 1000);
 
@@ -78,7 +80,7 @@ void initAccel() {
     // Default to 5kHz low-power sampling
     accel.setDataRate(LIS3DH_DATARATE_LOWPOWER_5KHZ);
 
-    accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
+    //accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
     accel.writeRegister8(LIS3DH_REG_CTRL3, 0x40); // Enable AOI interrupt
 
     // Set 2g range
@@ -92,7 +94,7 @@ void initAccel() {
 
     // Reset HP Filter
     accel.readRegister8(LIS3DH_REG_INT1SRC);
-    accel.readRegister8(LIS3DH_REG_CTRL2);
+    //accel.readRegister8(LIS3DH_REG_CTRL2);
 
 }
 
@@ -147,7 +149,6 @@ void activateGPS() {
 
 
 int publishMode(String mode);
-int forceSleep(String seconds);
 void button_clicked(system_event_t event, int param);
 
 
@@ -166,7 +167,6 @@ void setup() {
     Serial.begin(9600);
 
     Particle.function("publish", publishMode);
-    Particle.function("sleep", forceSleep);
 
     // Setup manual sleep button clicks
     System.on(button_final_click, button_clicked);
@@ -179,21 +179,38 @@ int publishMode(String mode) {
 }
 
 
-// Define sleep timer function
-bool doSleep() {
-    Serial.println("Sleeping...");
-    System.sleep(SLEEP_MODE_DEEP, SLEEP_TIME);
+void sleep() {
+    delay(100);
+
+    // Publish status
+    //Particle.publish(PREFIX + String("s"), "sleeping", 1800, PRIVATE);
+
+    // Reset timers
+    lastPublish = 0;
+    lastMotion = 0;
+    lastCellLocation = 0;
+
+    // Turn off D7 (motion indicator)
+    Serial.println("Sleep: Turning off D7 LED...");
+    digitalWrite(D7, LOW);
+
+    // Turn off Cellular modem and GPS
+    Serial.println("Sleep: Deactivating GPS...");
+    deactivateGPS();
+    Serial.println("Sleep: Disconnecting from cloud...");
+    Particle.disconnect();
+    Serial.println("Sleep: Turning off Cellular modem...");
+    Cellular.off();
+
+    // Sleep battery gauge
+    Serial.println("Sleep: Turning off battery gauge...");
+    fuel.sleep();
+
+    // reset the accelerometer interrupt so we can sleep without instantly waking
+    accel.readRegister8(LIS3DH_REG_INT1SRC);
+    System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
 }
 
-
-int forceSleep(String seconds) {
-    sscanf(seconds, "%u", SLEEP_TIME);
-
-    Serial.printlnf("Sleeping in 10s for %u", SLEEP_TIME);
-    Timer shutdown_timer(10000, doSleep, true);
-    shutdown_timer.start();
-    return 1;
-}
 
 void button_clicked(system_event_t event, int param)
 {
@@ -201,7 +218,8 @@ void button_clicked(system_event_t event, int param)
         Serial.printlnf("Button %d pressed %d times...", times, param);
         if(times == 3) {
             Serial.println("Manually deep sleeping for 21600s but will wake up for motion...");
-            System.sleep(SLEEP_MODE_DEEP,HOW_LONG_SHOULD_WE_SLEEP);
+            // reset the accelerometer interrupt so we can sleep without instantly waking
+            TIME_TO_SLEEP = true;
         } else {
             Serial.printlnf("Mode button %d clicks is unknown! Maybe this is a system handled number?", event);
         }
@@ -319,10 +337,8 @@ bool hasMotion() {
 }
 
 
-void checkMotion() {
+void checkMotion(unsigned long now) {
     if(hasMotion()) {
-        unsigned long now = millis();
-
         Serial.printlnf("checkMotion: BUMP - Setting lastMotion to %d", now);
 
         lastMotion = now;
@@ -335,6 +351,7 @@ void checkMotion() {
         if (Particle.connected() == false) {
             // Init GPS now, gives the module a little time to fix while particle connects
             Serial.println("checkMotion: Connecting...");
+            Cellular.on();
             Particle.connect();
             Particle.publish(PREFIX + String("s"), "motion_checkin", 1800, PRIVATE);
         }
@@ -359,6 +376,7 @@ void idleCheckin() {
         // it's been too long!  Lets say hey!
         if (Particle.connected() == false) {
             Serial.println("idleCheckin: Connecting...");
+            Cellular.on();
             Particle.connect();
         }
 
@@ -421,22 +439,11 @@ void idleSleep(unsigned long now) {
     // Make sure this is valid
     unsigned long since_last_motion = now - lastMotion;
 
-    if (0 < since_last_motion > NO_MOTION_IDLE_SLEEP_DELAY) {
-        Serial.printlnf("No motion in %d ms, sleeping...", (now - lastMotion));
+    if ((0 < since_last_motion) && (since_last_motion > NO_MOTION_IDLE_SLEEP_DELAY)) {
+        Serial.printlnf("No motion in %d ms, sleeping...", since_last_motion);
         // hey, it's been longer than xx minutes and nothing is happening, lets go to sleep.
         // if the accel triggers an interrupt, we'll wakeup earlier than that.
-
-        Particle.publish(PREFIX + String("s"), "sleeping", 1800, PRIVATE);
-
-        lastPublish = 0;
-        lastMotion = 0;
-        lastCellLocation = 0;
-
-        deactivateGPS();
-
-        // lets give ourselves a chance to settle, deal with anything pending, achieve enlightenment...
-        delay(10*1000);
-        System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
+        TIME_TO_SLEEP = true;
     }
 }
 
@@ -456,7 +463,7 @@ void loop() {
      * if so, enable GPS, connect, reset timers. This order gives time for
      * GPS to start while we connect
      */
-    checkMotion();
+    checkMotion(now);
 
     /* If we havent idle checked in in a long time, do it now.
      * This enables GPS, connects, resets idle timer and sends
@@ -496,6 +503,10 @@ void loop() {
     // use "now" instead of millis...  If it takes us a REALLY long time to connect, we don't want to
     // accidentally idle out.
     idleSleep(now);
+
+    if(TIME_TO_SLEEP) {
+        sleep();
+    }
 
     delay(10);
 }
