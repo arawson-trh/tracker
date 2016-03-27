@@ -174,6 +174,22 @@ void setup() {
 }
 
 
+void colorDelay(uint16_t timeDelay) {
+    RGB.control(true);
+    for(int i = 0; i < (timeDelay / 100); i++) {
+
+        if((i % 3) == 0)
+            RGB.color(255,0,0);
+        if((i % 3) == 1)
+            RGB.color(0,255,0);
+        if((i % 3) == 2)
+            RGB.color(0,0,255);
+        delay(100);
+    }
+    RGB.control(false);
+}
+
+
 int publishMode(String mode) {
     PUBLISH_MODE = (mode == "enabled") ? true : false;
     return 1;
@@ -217,11 +233,11 @@ void button_clicked(system_event_t event, int param)
 {
         int times = system_button_clicks(param);
         Serial.printlnf("Button %d pressed %d times...", times, param);
-        if(times == 3) {
+        if(times == 4) {
             Serial.println("Manually deep sleeping for 21600s but will wake up for motion...");
             // reset the accelerometer interrupt so we can sleep without instantly waking
             TIME_TO_SLEEP = true;
-        } else if(times == 4) {
+        } else if(times == 3) {
             ACCEL_HPFILTER_SET = false;
         } else {
             Serial.printlnf("Mode button %d clicks is unknown! Maybe this is a system handled number?", event);
@@ -450,27 +466,21 @@ void idleSleep(unsigned long now) {
     }
 }
 
+
 void resetHPFilter() {
     // Only cause a 'set' of the HP filter on first start or when requested
     // Device should be MOTIONLESS.
     if(!ACCEL_HPFILTER_SET) {
         Serial.println("Resetting HP filter in 5s, make sure device is stationary!");
-        RGB.control(true);
-        for(int i = 0; i < 50; i++) {
-            if((i % 3) == 0)
-                RGB.color(255,0,0);
-            if((i % 3) == 1)
-                RGB.color(0,255,0);
-            if((i % 3) == 2)
-                RGB.color(0,0,255);
-            delay(100);
-        }
+
+        colorDelay(5000);
+
         Serial.println("Resetting HP NOW!");
         accel.readRegister8(LIS3DH_REG_CTRL2);
         ACCEL_HPFILTER_SET = true;
-        RGB.control(false);
     }
 }
+
 
 void loop() {
 
