@@ -83,13 +83,13 @@ void initAccel() {
     //accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
     accel.writeRegister8(LIS3DH_REG_CTRL3, 0x40); // Enable AOI interrupt
 
-    // Set 2g range
-    accel.setRange(LIS3DH_RANGE_2_G);
+    // Set 4g range
+    accel.setRange(LIS3DH_RANGE_4_G);
 
     accel.writeRegister8(LIS3DH_REG_CTRL5, 0x08); // latch interrupt so we can read when ready if blocked
 
-    accel.writeRegister8(LIS3DH_REG_INT1THS, 0x08); // Set threshold to 8 (relatively low?)
-    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x01); // Set duration to 1 cycle
+    accel.writeRegister8(LIS3DH_REG_INT1THS, 0x14); // Set threshold to 8 (relatively low?)
+    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x14); // Set duration to 1 cycle
     accel.writeRegister8(LIS3DH_REG_INT1CFG, 0x2A); // Enable X,Y,Z interrupt generation
 
     // Reset HP Filter
