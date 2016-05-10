@@ -1,7 +1,7 @@
 Tracker
 ===
 
-Based on David Middlecamp's [fancy-asset-tracker](/dmiddlecamp/fancy-asset-tracker) demo for the Particle Electron with the Asset Tracker Shield.
+Based on David Middlecamp's [fancy-asset-tracker](https://github.com/dmiddlecamp/fancy-asset-tracker) demo for the Particle Electron with the Asset Tracker Shield.
 
 Functionality
 ====
