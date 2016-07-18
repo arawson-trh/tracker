@@ -10,7 +10,7 @@
 
 // GPS
 #include "inc/Adafruit_GPS.h"
-#include "inc/Adafruit_LIS3DH.h"
+#include "inc/LIS3DH.h"
 #include "inc/GPS_Math.h"
 
 // Cellular Location
@@ -18,7 +18,7 @@
 
 #define GPSSerial Serial1
 Adafruit_GPS GPS(&GPSSerial);
-Adafruit_LIS3DH accel = Adafruit_LIS3DH(A2, A5, A4, A3);
+LIS3DH accel(SPI, A2, WKP);
 FuelGauge fuel;
 
 SerialDebugOutput debugOutput;
@@ -27,6 +27,7 @@ SerialDebugOutput debugOutput;
 #define CLICKTHRESHHOLD 20
 
 
+// SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
 
@@ -39,6 +40,7 @@ unsigned long lastMMessage = 0;
 
 time_t lastIdleCheckin = 0;
 
+bool          ACCEL_INITED       = false;
 bool          GPS_ACTIVE         = false;
 unsigned long GPS_ACTIVATED_AT   = 0;
 unsigned long GPS_DEACTIVATED_AT = 0;
@@ -49,8 +51,6 @@ unsigned long GPS_NO_FIX_STARTUP  = (10 * 60 * 1000);
 bool PUBLISH_MODE = true; // Publish by default
 
 bool TIME_TO_SLEEP = false;
-
-retained bool ACCEL_HPFILTER_SET = false;
 
 // publish after x seconds
 unsigned int PUBLISH_DELAY = (120 * 1000);
@@ -77,27 +77,15 @@ unsigned int SLEEP_TIME = 3600; // Sleep for an hour by default
 int MAX_IDLE_CHECKIN_DELAY = (HOW_LONG_SHOULD_WE_SLEEP - 60);
 
 void initAccel() {
-    accel.begin(LIS3DH_DEFAULT_ADDRESS);
+    Serial.println("Accel: Initialising...");
 
-    // Default to 5kHz low-power sampling
-    accel.setDataRate(LIS3DH_DATARATE_LOWPOWER_5KHZ);
+    pinMode(WKP, INPUT_PULLUP);
 
-    accel.writeRegister8(LIS3DH_REG_CTRL2, 0xC9); // Enable HP Filter with AUTORESET on interrupt
-    //accel.writeRegister8(LIS3DH_REG_CTRL2, 0x00); // Disable HP Filter
-    accel.writeRegister8(LIS3DH_REG_CTRL3, 0x40); // Enable AOI interrupt
-
-    // Set 4g range
-    accel.setRange(LIS3DH_RANGE_4_G);
-
-    accel.writeRegister8(LIS3DH_REG_CTRL5, 0x08); // latch interrupt so we can read when ready if blocked
-
-    accel.writeRegister8(LIS3DH_REG_INT1THS, 0x14); // Set threshold to 8 (relatively low?)
-    accel.writeRegister8(LIS3DH_REG_INT1DUR, 0x08); // Set duration to 1 cycle
-    accel.writeRegister8(LIS3DH_REG_INT1CFG, 0x2A); // Enable X,Y,Z interrupt generation
-
-    // Reset Motion Interrupt
-    accel.readRegister8(LIS3DH_REG_INT1SRC);
-
+    if (!accel.setupLowPowerWakeMode(16)) {
+        Serial.println("Accel: Unable to configure wake mode!");
+    }
+    accel.enableTemperature();
+    ACCEL_INITED = true;
 }
 
 bool gpsActivated() {
@@ -224,7 +212,7 @@ void sleep() {
     fuel.sleep();
 
     // reset the accelerometer interrupt so we can sleep without instantly waking
-    accel.readRegister8(LIS3DH_REG_INT1SRC);
+    bool awake = ((accel.clearInterrupt() & accel.INT1_SRC_IA) != 0);
     System.sleep(SLEEP_MODE_DEEP, HOW_LONG_SHOULD_WE_SLEEP);
 }
 
@@ -237,8 +225,6 @@ void button_clicked(system_event_t event, int param)
             Serial.println("Manually deep sleeping for 21600s but will wake up for motion...");
             // reset the accelerometer interrupt so we can sleep without instantly waking
             TIME_TO_SLEEP = true;
-        } else if(times == 3) {
-            ACCEL_HPFILTER_SET = false;
         } else {
             Serial.printlnf("Mode button %d clicks is unknown! Maybe this is a system handled number?", event);
         }
@@ -257,8 +243,6 @@ void checkGPS() {
                 GPS.parse(GPS.lastNMEA());
             }
         }
-    } else {
-        Serial.println("Attempted to check GPS but it isn't active!");
     }
 }
 
@@ -320,6 +304,7 @@ void publishLocation() {
                     + ",\"s\": 0"
                     + ",\"vcc\":"      + String(fuel.getVCell())
                     + ",\"soc\":"      + String(fuel.getSoC())
+                    + ",\"tmp\":"      + String(accel.getTemperature())
                     + "}";
                 Particle.publish(PREFIX + String("l"), loc_data, 60, PRIVATE);
             } else if (GPS.fix) {
@@ -335,6 +320,7 @@ void publishLocation() {
                     + ",\"s\": "       + String(GPS.satellites)
                     + ",\"vcc\":"      + String(fuel.getVCell())
                     + ",\"soc\":"      + String(fuel.getSoC())
+                    + ",\"tmp\":"      + String(accel.getTemperature())
                     + "}";
                 Particle.publish(PREFIX + String("l"), loc_data, 60, PRIVATE);
             } else {
@@ -346,11 +332,16 @@ void publishLocation() {
 
 
 bool hasMotion() {
-    bool motion = digitalRead(WKP);
+   // bool motion = digitalRead(WKP);
+
+    uint8_t regValue = accel.readRegister8(accel.REG_INT1_SRC);
+    bool motion = ((regValue & accel.INT1_SRC_IA) != 0);
+
     digitalWrite(D7, (motion) ? HIGH : LOW);
 
-    // Reset accelerometer interrupt (latched)
-    accel.readRegister8(LIS3DH_REG_INT1SRC);
+    if (motion) {
+        initAccel();
+    }
 
     return motion;
 }
@@ -467,21 +458,6 @@ void idleSleep(unsigned long now) {
 }
 
 
-void resetHPFilter() {
-    // Only cause a 'set' of the HP filter on first start or when requested
-    // Device should be MOTIONLESS.
-    if(!ACCEL_HPFILTER_SET) {
-        Serial.println("Resetting HP filter in 5s, make sure device is stationary!");
-
-        colorDelay(5000);
-
-        Serial.println("Resetting HP NOW!");
-        accel.readRegister8(LIS3DH_REG_CTRL2);
-        ACCEL_HPFILTER_SET = true;
-    }
-}
-
-
 void loop() {
 
     unsigned long now = millis();
@@ -493,7 +469,9 @@ void loop() {
     if (lastPublish > now) { lastPublish = now; }
     if (lastCellLocation > now) { lastCellLocation = now; }
 
-    resetHPFilter();
+    if(!ACCEL_INITED) {
+        initAccel();
+    }
 
     /* Check to see if we've seen any motion
      * if so, enable GPS, connect, reset timers. This order gives time for
