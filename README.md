@@ -1,4 +1,4 @@
-Tracker
+Tracker 
 ===
 
 Based on David Middlecamp's [fancy-asset-tracker](https://github.com/dmiddlecamp/fancy-asset-tracker) demo for the Particle Electron with the Asset Tracker Shield.
@@ -26,7 +26,7 @@ The basic implementation provides a combined GPS and Mobile network location sys
 
 - If GPS module has not gained a fix in 10 minutes (accelerometer will keep the tracker running permanently if it is in motion)
   - Turn off the GPS module for 10 minutes to save battery (yay active antenna)
-  
+
 - TODO: If battery SoC is less than 20%
   - Disable accelerometer based interrupts that keep the device awake
   - Rely on idle checkin every 6 hours (or longer? configurable maybe) to report location
@@ -39,5 +39,3 @@ TODO
 ====
 - Implement low-battery 'emergency' mode that only reports location every <x> hours
 - Implement ability to deep sleep the tracker for <x> hours with no motion activated wakeup, e.g. when tracked device is being used by owner. Proximity based maybe?
-
-
